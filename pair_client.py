@@ -225,7 +225,7 @@ def _rms(data: bytes) -> float:
 
 
 class PairClient:
-    def __init__(self, overlay=None, voice_id: str = "emily"):
+    def __init__(self, overlay=None, voice_id: str = "olivia"):
         self.overlay   = overlay
         self._audio    = pyaudio.PyAudio()
         self._out_q    = queue.Queue()
@@ -255,7 +255,7 @@ class PairClient:
                 json={
                     "text": text,
                     "voice_id": self._voice_id,
-                    "model": "lightning_v3.1",
+                    "model": "lightning-v3.1",
                     "speed": 1.0,
                     "sample_rate": OUT_RATE,
                     "language": "en",

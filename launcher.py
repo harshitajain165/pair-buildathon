@@ -14,25 +14,26 @@ from backend import app, launch_queue
 from ui import PairWidget
 from pair_client import PairClient
 
-PORT = 7474
+PORT = 8421
 
 
 def _start_server():
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="error")
+    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
 
 
 def main():
     qt_app = QApplication(sys.argv)
     qt_app.setQuitOnLastWindowClosed(False)
 
-    # Start FastAPI in background thread
+    print(f"[pair] starting server on http://localhost:{PORT} ...")
     threading.Thread(target=_start_server, daemon=True).start()
 
-    # Open browser after server is ready
     def _open_browser():
-        time.sleep(0.7)
-        webbrowser.open(f"http://localhost:{PORT}")
+        time.sleep(1.2)
+        url = f"http://localhost:{PORT}"
+        print(f"[pair] opening {url}")
+        webbrowser.open(url)
 
     threading.Thread(target=_open_browser, daemon=True).start()
 
