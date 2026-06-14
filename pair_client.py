@@ -225,7 +225,7 @@ def _rms(data: bytes) -> float:
 
 
 class PairClient:
-    def __init__(self, overlay=None):
+    def __init__(self, overlay=None, voice_id: str = "emily"):
         self.overlay   = overlay
         self._audio    = pyaudio.PyAudio()
         self._out_q    = queue.Queue()
@@ -235,6 +235,7 @@ class PairClient:
         self._claude   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         self._api_key  = os.getenv("SMALLEST_API_KEY")
         self._out_rate = OUT_RATE
+        self._voice_id = voice_id
 
     def _set_status(self, s: str):
         if self.overlay:
@@ -253,7 +254,7 @@ class PairClient:
                 },
                 json={
                     "text": text,
-                    "voice_id": "sophia",
+                    "voice_id": self._voice_id,
                     "model": "lightning_v3.1",
                     "speed": 1.0,
                     "sample_rate": OUT_RATE,
