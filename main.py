@@ -1,39 +1,31 @@
 import asyncio
+import sys
+import threading
 
 from dotenv import load_dotenv
-
 load_dotenv()
 
+from PyQt6.QtWidgets import QApplication
+from ui import PairWidget
 from pair_client import PairClient
 
 
-class TerminalStatus:
-    ICONS = {
-        "ready":     "✦",
-        "listening": "◉",
-        "thinking":  "◌",
-        "speaking":  "▶",
-        "error":     "✗",
-    }
-
-    def set_status(self, status: str):
-        key = status.split(" ")[0].split(":")[0]
-        icon = self.ICONS.get(key, "·")
-        print(f"\r[Pair] {icon}  {status:<40}", end="", flush=True)
-
-    def run(self):
-        pass
-
-
 def main():
-    status = TerminalStatus()
-    client = PairClient(overlay=status)
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)   # keep alive even if widget hidden
 
-    print("Pair starting… (Ctrl+C to quit)\n")
-    try:
+    widget = PairWidget()
+    widget.show()
+
+    client = PairClient(overlay=widget)
+
+    def run_pair():
         asyncio.run(client.run())
-    except KeyboardInterrupt:
-        print("\nPair stopped.")
+
+    thread = threading.Thread(target=run_pair, daemon=True)
+    thread.start()
+
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

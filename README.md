@@ -28,36 +28,33 @@ A voice-first AI developer assistant for macOS. Speak naturally — Pair execute
 ```bash
 git clone https://github.com/harshitajain165/pair-buildathon
 cd pair-buildathon
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# fill in .env with your API keys
+./setup.sh
 ```
+
+`setup.sh` creates the virtual environment, installs all dependencies, and walks you through entering your API keys interactively.
 
 ### API keys needed
 
-| Key | Where to get it |
-|-----|----------------|
-| `SMALLEST_API_KEY` | waves.smallest.ai |
-| `ANTHROPIC_API_KEY` | console.anthropic.com |
-| `SLACK_BOT_TOKEN` | api.slack.com/apps |
-| `GITHUB_TOKEN` | github.com/settings/tokens |
+| Key | Where to get it | Required |
+|-----|----------------|----------|
+| `SMALLEST_API_KEY` | waves.smallest.ai | ✅ |
+| `ANTHROPIC_API_KEY` | console.anthropic.com | ✅ |
+| `SLACK_BOT_TOKEN` | api.slack.com/apps | Optional |
+| `GITHUB_TOKEN` | github.com/settings/tokens | Optional |
 
 ### macOS permissions
 
-Go to **System Settings → Privacy & Security** and grant:
-- **Microphone** → Terminal
-- **Accessibility** → Terminal
-- **Screen Recording** → Terminal
+Go to **System Settings → Privacy & Security** and grant Terminal access to:
+- **Microphone**
+- **Accessibility**
+- **Screen Recording**
 
 ---
 
 ## Run
 
 ```bash
-source .venv/bin/activate
-python3 main.py
+./run.sh
 ```
 
 Then just talk.
