@@ -43,6 +43,36 @@ def get_open_prs(repo: str) -> str:
         return str(e)
 
 
+def create_github_repo(
+    name: str,
+    description: str = "",
+    private: bool = False,
+    auto_init: bool = True,
+) -> str:
+    """Create a new GitHub repository under the authenticated user's account."""
+    try:
+        resp = requests.post(
+            "https://api.github.com/user/repos",
+            json={
+                "name": name,
+                "description": description,
+                "private": private,
+                "auto_init": auto_init,
+            },
+            headers=_headers(),
+        )
+        if resp.status_code == 201:
+            repo = resp.json()
+            return f"Repo created: {repo['html_url']}"
+        msg = resp.json().get("message", "unknown error")
+        errors = resp.json().get("errors", [])
+        if errors:
+            msg += " — " + "; ".join(e.get("message", "") for e in errors)
+        return f"GitHub error: {msg}"
+    except RuntimeError as e:
+        return str(e)
+
+
 def get_current_repo() -> str:
     result = subprocess.run(
         "git remote get-url origin", shell=True, capture_output=True, text=True

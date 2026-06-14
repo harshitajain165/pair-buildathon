@@ -1,22 +1,21 @@
 import math
 
-from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QBrush, QFont, QFontDatabase
+from PyQt6.QtCore import Qt, QTimer, QPointF, pyqtSignal
+from PyQt6.QtGui import (
+    QPainter, QColor, QBrush, QFont, QPen,
+    QConicalGradient, QLinearGradient,
+)
 from PyQt6.QtWidgets import QApplication, QWidget
 
 
-COLORS = {
-    "ready":     "#666666",
-    "listening": "#4A9EFF",
-    "thinking":  "#FFB347",
-    "speaking":  "#50C878",
-    "running":   "#B57BFF",
-    "error":     "#FF4C4C",
-}
-
-
 class PairWidget(QWidget):
-    _sig = pyqtSignal(str)   # thread-safe bridge
+    _sig = pyqtSignal(str)
+
+    # Siri gradient stops (purple → blue → cyan → pink → purple)
+    _SIRI = ["#8B5CF6", "#3B82F6", "#06B6D4", "#EC4899", "#8B5CF6"]
+
+    # Waveform bar colors
+    _BAR_COLORS = ["#8B5CF6", "#6EA8FE", "#06B6D4", "#EC4899", "#A78BFA"]
 
     def __init__(self):
         super().__init__()
@@ -33,113 +32,136 @@ class PairWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(300, 72)
 
-        # Bottom-right corner
+        # Bottom center, 28px above dock
         screen = QApplication.primaryScreen().availableGeometry()
-        self.move(screen.width() - 320, screen.height() - 110)
+        x = (screen.width() - self.width()) // 2
+        y = screen.height() - self.height() - 28
+        self.move(x, y)
 
         self._timer = QTimer()
         self._timer.timeout.connect(self._tick)
-        self._timer.start(40)   # ~25 fps
+        self._timer.start(33)   # ~30 fps
 
         self._sig.connect(self._apply_status)
-
-    # ── Public API (thread-safe) ──────────────────────────────────────────────
 
     def set_status(self, status: str):
         self._sig.emit(status)
 
     def run(self):
-        pass   # kept for compatibility
-
-    # ── Internal ──────────────────────────────────────────────────────────────
+        pass
 
     def _apply_status(self, status: str):
         key = status.split(" ")[0].split(":")[0].lower()
-        self._status_key  = key if key in COLORS else "ready"
+        valid = {"ready", "listening", "thinking", "speaking", "running", "error"}
+        self._status_key  = key if key in valid else "ready"
         self._status_text = status
 
     def _tick(self):
-        self._phase = (self._phase + 0.12) % (2 * math.pi)
+        speed = 0.10 if self._status_key in ("speaking", "thinking") else 0.07
+        self._phase = (self._phase + speed) % (2 * math.pi)
         self.update()
 
-    # ── Painting ──────────────────────────────────────────────────────────────
+    # ── Painting ─────────────────────────────────────────────────────────────
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-        # Background pill
-        p.setBrush(QColor(14, 14, 16, 230))
+        w, h, r = self.width(), self.height(), 22
+
+        # Drop shadow — lighter to suit semi-transparent pill
+        p.setBrush(QColor(0, 0, 0, 14))
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(0, 0, self.width(), self.height(), 18, 18)
+        p.drawRoundedRect(4, 7, w - 8, h - 4, r, r)
 
-        # Subtle border
+        # Frosted glass pill — semi-transparent white with slight cool tint
+        p.setBrush(QColor(245, 245, 255, 155))
+        p.setPen(QPen(QColor(180, 180, 210, 60), 1.0))
+        p.drawRoundedRect(0, 2, w, h - 2, r, r)
+
+        # Inner highlight (top edge)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QColor(255, 255, 255, 18))
-        p.drawRoundedRect(1, 1, self.width() - 2, self.height() - 2, 17, 17)
+        p.setPen(QPen(QColor(255, 255, 255, 120), 1.0))
+        p.drawRoundedRect(1, 3, w - 2, h - 4, r - 1, r - 1)
 
-        color = QColor(COLORS.get(self._status_key, "#666666"))
-        cx, cy = 44, self.height() // 2
-
+        # Content
+        cx, cy = 46, h // 2 + 1
         if self._status_key in ("listening", "speaking"):
-            self._draw_waveform(p, color, cx, cy)
+            self._draw_waveform(p, cx, cy)
         else:
-            self._draw_orb(p, color, cx, cy)
+            self._draw_siri_orb(p, cx, cy)
 
         # Status text
-        p.setPen(QColor(230, 230, 230, 210))
-        font = QFont("SF Pro Text", 13)
+        label = self._status_text.capitalize()
+        if len(label) > 20:
+            label = label[:17] + "…"
+
+        font = QFont("-apple-system", 13)
         font.setWeight(QFont.Weight.Medium)
         p.setFont(font)
-        label = self._status_text.capitalize()
-        if len(label) > 22:
-            label = label[:19] + "…"
-        p.drawText(80, 0, self.width() - 90, self.height(),
-                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                   label)
+        p.setPen(QColor(29, 29, 31, 230))
+        p.drawText(
+            84, 0, w - 92, h,
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            label,
+        )
 
-    def _draw_orb(self, p: QPainter, color: QColor, cx: int, cy: int):
-        if self._status_key == "thinking":
-            pulse = 0.4 + 0.6 * abs(math.sin(self._phase))
-        elif self._status_key == "ready":
-            pulse = 0.85
+    def _draw_siri_orb(self, p: QPainter, cx: int, cy: int):
+        if self._status_key == "ready":
+            pulse = 0.88 + 0.12 * math.sin(self._phase)
+        elif self._status_key == "thinking":
+            pulse = 0.7 + 0.3 * abs(math.sin(self._phase * 1.6))
         else:
-            pulse = 0.5 + 0.5 * math.sin(self._phase * 1.5)
+            pulse = 0.75 + 0.25 * abs(math.sin(self._phase))
 
-        r = int(13 + 4 * (pulse - 0.5))
+        r = int(22 * pulse)
 
-        # Glow
-        glow = QColor(color)
-        glow.setAlpha(int(40 * pulse))
-        p.setBrush(QBrush(glow))
+        # Soft outer glow rings
+        for radius_extra, alpha in [(16, 10), (10, 18), (5, 28)]:
+            gr = r + radius_extra
+            c = QColor("#8B5CF6")
+            c.setAlpha(alpha)
+            p.setBrush(c)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(cx - gr, cy - gr, gr * 2, gr * 2)
+
+        # Rotating Siri conic gradient
+        angle = (self._phase * 360 / (2 * math.pi) * 2) % 360
+        grad = QConicalGradient(QPointF(cx, cy), angle)
+        for i, hex_color in enumerate(self._SIRI):
+            grad.setColorAt(i / (len(self._SIRI) - 1), QColor(hex_color))
+
+        p.setBrush(QBrush(grad))
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(cx - r - 9, cy - r - 9, (r + 9) * 2, (r + 9) * 2)
-
-        # Core
-        core = QColor(color)
-        core.setAlpha(int(180 + 75 * (pulse - 0.5)))
-        p.setBrush(QBrush(core))
         p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
 
-    def _draw_waveform(self, p: QPainter, color: QColor, cx: int, cy: int):
-        n_bars    = 5
-        bar_w     = 4
-        bar_gap   = 3
-        total_w   = n_bars * bar_w + (n_bars - 1) * bar_gap
-        start_x   = cx - total_w // 2
+        # Soft white center highlight for depth
+        highlight = QLinearGradient(cx - r, cy - r, cx + r, cy + r)
+        highlight.setColorAt(0.0, QColor(255, 255, 255, 90))
+        highlight.setColorAt(1.0, QColor(255, 255, 255, 0))
+        p.setBrush(QBrush(highlight))
+        p.drawEllipse(cx - r, cy - r, r * 2, r * 2)
 
+    def _draw_waveform(self, p: QPainter, cx: int, cy: int):
+        n, bw, gap = 5, 4, 5
+        total = n * bw + (n - 1) * gap
+        sx = cx - total // 2
+
+        speed = 2.8 if self._status_key == "listening" else 2.2
         p.setPen(Qt.PenStyle.NoPen)
-        for i in range(n_bars):
-            offset = i * (math.pi * 2 / n_bars)
-            h = int(8 + 18 * abs(math.sin(self._phase * 2.5 + offset)))
-            x = start_x + i * (bar_w + bar_gap)
-            y = cy - h // 2
-            bar_color = QColor(color)
-            bar_color.setAlpha(180 + int(60 * abs(math.sin(self._phase + offset))))
-            p.setBrush(QBrush(bar_color))
-            p.drawRoundedRect(x, y, bar_w, h, 2, 2)
 
-    # ── Drag ──────────────────────────────────────────────────────────────────
+        for i in range(n):
+            offset = i * (math.pi * 2 / n)
+            bar_h = int(10 + 22 * abs(math.sin(self._phase * speed + offset)))
+            x = sx + i * (bw + gap)
+            y = cy - bar_h // 2
+            c = QColor(self._BAR_COLORS[i])
+            c.setAlpha(190 + int(55 * abs(math.sin(self._phase + offset))))
+            p.setBrush(c)
+            p.drawRoundedRect(x, y, bw, bar_h, 2, 2)
+
+    # ── Drag ─────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:

@@ -51,6 +51,8 @@ def main():
 
         widget = PairWidget()
         widget.show()
+        widget.raise_()
+        widget.activateWindow()
 
         client = PairClient(overlay=widget, voice_id=voice_id)
 

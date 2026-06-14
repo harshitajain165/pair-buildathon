@@ -24,7 +24,9 @@ from tools.mac_control import open_application
 from tools.spotify_tool import control_spotify
 from tools.standup import generate_standup
 from tools.ui_modifier import modify_ui
-from tools.github_tool import create_github_issue, get_open_prs
+from tools.github_tool import create_github_issue, get_open_prs, create_github_repo
+from tools.youtube_tool import play_youtube, control_youtube
+from tools.scroll_tool import scroll_window
 
 # ── Smallest AI endpoints ─────────────────────────────────────────────────────
 PULSE_URL     = "https://waves-api.smallest.ai/api/v1/pulse/get_text"
@@ -189,12 +191,81 @@ CLAUDE_TOOLS = [
         },
     },
     {
+        "name": "create_github_repo",
+        "description": (
+            "Create a new GitHub repository. Use when the user says "
+            "'create a repo', 'make a new GitHub repo', 'initialize a repo called X'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":        {"type": "string", "description": "Repository name (no spaces)"},
+                "description": {"type": "string", "description": "Short description"},
+                "private":     {"type": "boolean", "description": "True for private, false for public"},
+                "auto_init":   {"type": "boolean", "description": "Initialize with a README (default true)"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
         "name": "get_open_prs",
         "description": "List open pull requests in a GitHub repository.",
         "input_schema": {
             "type": "object",
             "properties": {"repo": {"type": "string", "description": "owner/repo"}},
             "required": ["repo"],
+        },
+    },
+    {
+        "name": "play_youtube",
+        "description": (
+            "Open YouTube and search for a video. Use when the user says "
+            "'play', 'put on', 'search YouTube', 'watch', or names a video/song/channel."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "search query"}},
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "scroll_window",
+        "description": (
+            "Scroll the frontmost window or browser tab. Use when the user says "
+            "'scroll down', 'scroll up', 'go to the top', 'go to the bottom', "
+            "'scroll a bit', 'scroll a lot'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "enum": ["down", "up", "top", "bottom"],
+                },
+                "amount": {
+                    "type": "string",
+                    "enum": ["small", "medium", "large"],
+                    "description": "How far to scroll. Ignored when direction is top/bottom.",
+                },
+            },
+            "required": ["direction"],
+        },
+    },
+    {
+        "name": "control_youtube",
+        "description": (
+            "Pause or resume a YouTube video currently playing in the browser. "
+            "Use when the user says 'pause', 'stop the video', 'resume', 'unpause'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["pause", "play", "resume"],
+                }
+            },
+            "required": ["action"],
         },
     },
 ]
@@ -212,7 +283,11 @@ TOOL_HANDLERS = {
     "modify_ui":           modify_ui,
     "catch_me_up":         catch_me_up,
     "create_github_issue": create_github_issue,
+    "create_github_repo":  create_github_repo,
     "get_open_prs":        get_open_prs,
+    "play_youtube":        play_youtube,
+    "control_youtube":     control_youtube,
+    "scroll_window":       scroll_window,
 }
 
 
@@ -232,10 +307,11 @@ class PairClient:
         self._running  = False
         self._lock     = threading.Lock()   # guards _history
         self._history  = []
-        self._claude   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        self._api_key  = os.getenv("SMALLEST_API_KEY")
-        self._out_rate = OUT_RATE
-        self._voice_id = voice_id
+        self._claude      = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        self._api_key     = os.getenv("SMALLEST_API_KEY")
+        self._out_rate    = OUT_RATE
+        self._voice_id    = voice_id
+        self._processing  = False   # True while STT→Claude→TTS is in-flight
 
     def _set_status(self, s: str):
         if self.overlay:
@@ -424,7 +500,8 @@ class PairClient:
                         silent_count += 1
                         if silent_count >= SILENCE_CHUNKS:
                             in_speech = False
-                            if len(frames) >= MIN_SPEECH_CHUNKS:
+                            if len(frames) >= MIN_SPEECH_CHUNKS and not self._processing:
+                                self._processing = True
                                 self._set_status("thinking")
                                 captured, frames = frames, []
                                 threading.Thread(
@@ -439,11 +516,14 @@ class PairClient:
             stream.close()
 
     def _handle_utterance(self, frames: list):
-        text = self._transcribe(frames)
-        if text:
-            self._process(text)
-        else:
-            self._set_status("ready")
+        try:
+            text = self._transcribe(frames)
+            if text:
+                self._process(text)
+            else:
+                self._set_status("ready")
+        finally:
+            self._processing = False
 
     # ── Entry point ───────────────────────────────────────────────────────────
 
