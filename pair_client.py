@@ -255,7 +255,7 @@ class PairClient:
                 json={
                     "text": text,
                     "voice_id": self._voice_id,
-                    "model": "lightning-v3.1",
+                    "model": "lightning_v3.1",
                     "speed": 1.0,
                     "sample_rate": OUT_RATE,
                     "language": "en",
